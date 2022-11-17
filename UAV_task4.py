@@ -1,3 +1,5 @@
+# 修改状态空间，改为障碍的观测和目标点的位置差（仅1个）
+
 # 2022.4.28修正版，此种方法由无人机主动探索
 
 import sys, os
@@ -24,7 +26,7 @@ curr_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")  # 获取当前时
 class DDPGConfig:
     def __init__(self):
         self.algo = 'DDPG'  # 算法名称
-        self.env = 'UAV-Task3'  # 环境名称
+        self.env = 'UAV-Task4'  # 环境名称
         self.result_path = curr_path + "/outputs/" + self.env + \
                            '/' + curr_time + '/results/'  # 保存结果的路径
         self.model_path = curr_path + "/outputs/" + self.env + \
@@ -53,7 +55,8 @@ class DDPGConfig:
 def env_agent_config(cfg, seed):
     env = APF()
     setup_seed(seed)  # 随机种子
-    state_dim = 6 * (env.numberOfSphere + env.numberOfCylinder + env.numberOfCone) + 0  # 障碍物的三维和目标点的三维
+    state_dim = 3 * (env.numberOfSphere + env.numberOfCylinder + env.numberOfCone) + 3  # 障碍物的三维和目标点的三维
+
     # # task用这个动作维度
     # action_dim = 1 * (env.numberOfSphere + env.numberOfCylinder + env.numberOfCone)
 
@@ -89,9 +92,11 @@ def train(cfg, env, agent):
             i_step += 1
             collision_flag = 0
             temp_index = 0
-            obsDicq = env.calculateDynamicState(q)
+            obsDicq = env.calculateDynamicState2(q)
             obs_sphere, obs_cylinder, obs_cone = obsDicq['sphere'], obsDicq['cylinder'], obsDicq['cone']
-            obs_mix = obs_sphere + obs_cylinder + obs_cone
+            sAll = env.qgoal - q
+            sAll = sAll.tolist()
+            obs_mix = obs_sphere + obs_cylinder + obs_cone + sAll
             obs = np.array([])  # 中心控制器接受所有状态集合
             for k in range(len(obs_mix)):
                 obs = np.hstack((obs, obs_mix[k]))  # 拼接状态为一个1*n向量
@@ -161,10 +166,12 @@ def train(cfg, env, agent):
             else:
                 collision_count += 1
             flag_list.append(flag)
-            obsDicqNext = env.calculateDynamicState(q_next)
+            obsDicqNext = env.calculateDynamicState2(q_next)
             obs_sphere_next, obs_cylinder_next, obs_cone_next = obsDicqNext['sphere'], obsDicqNext['cylinder'], \
                                                                 obsDicqNext['cone']
-            obs_mix_next = obs_sphere_next + obs_cylinder_next + obs_cone_next
+            sAll_next = env.qgoal - q_next
+            sAll_next = sAll_next.tolist()
+            obs_mix_next = obs_sphere_next + obs_cylinder_next + obs_cone_next + sAll_next
             obs_next = np.array([])
             for k in range(len(obs_mix_next)):
                 obs_next = np.hstack((obs_next, obs_mix_next[k]))
@@ -220,9 +227,11 @@ def eval(cfg, env, agent, jieduan):
         for j in range(cfg.max_step):
             i_step += 1
             collision_flag = 0
-            obsDicq = env.calculateDynamicState(q)
+            obsDicq = env.calculateDynamicState2(q)
             obs_sphere, obs_cylinder, obs_cone = obsDicq['sphere'], obsDicq['cylinder'], obsDicq['cone']
-            obs_mix = obs_sphere + obs_cylinder + obs_cone
+            sAll = env.qgoal - q
+            sAll = sAll.tolist()
+            obs_mix = obs_sphere + obs_cylinder + obs_cone + sAll
             obs = np.array([])  # 中心控制器接受所有状态集合
             for k in range(len(obs_mix)):
                 obs = np.hstack((obs, obs_mix[k]))  # 拼接状态为一个1*n向量
@@ -272,10 +281,12 @@ def eval(cfg, env, agent, jieduan):
 
             q_next = env.getqNext2(env.epsilon0, action, q, q_before)
             env.path = np.vstack((env.path, q_next))
-            obsDicqNext = env.calculateDynamicState(q_next)
+            obsDicqNext = env.calculateDynamicState2(q_next)
             obs_sphere_next, obs_cylinder_next, obs_cone_next = obsDicqNext['sphere'], obsDicqNext['cylinder'], \
                                                                 obsDicqNext['cone']
-            obs_mix_next = obs_sphere_next + obs_cylinder_next + obs_cone_next
+            sAll_next = env.qgoal - q_next
+            sAll_next = sAll_next.tolist()
+            obs_mix_next = obs_sphere_next + obs_cylinder_next + obs_cone_next + sAll_next
             obs_next = np.array([])
             for k in range(len(obs_mix_next)):
                 obs_next = np.hstack((obs_next, obs_mix_next[k]))
@@ -317,10 +328,10 @@ if __name__ == '__main__':
     rewards, ma_rewards, count_list = train(cfg, env, agent)
     end = datetime.datetime.now()
     agent.save(path=cfg.model_path)
-    save_results(rewards, ma_rewards, tag='train_task3_' + env.env_name, path=cfg.result_path)
-    plot_rewards_cn(rewards, ma_rewards, tag="train_task3_" + env.env_name, env=cfg.env, algo=cfg.algo,
+    save_results(rewards, ma_rewards, tag='train_task4_' + env.env_name, path=cfg.result_path)
+    plot_rewards_cn(rewards, ma_rewards, tag="train_task4_" + env.env_name, env=cfg.env, algo=cfg.algo,
                     path=cfg.result_path)
-    writer = pd.ExcelWriter(r'D:\LY_UAV\UAV_task3_o4.xlsx')
+    writer = pd.ExcelWriter(r'D:\LY_UAV\UAV_task4_o4.xlsx')
     df1 = pd.DataFrame(ma_rewards, columns=['ma_rewards'])
     df2 = pd.DataFrame(count_list, columns=['count_list'])
     df1.to_excel(writer, sheet_name='df1')
@@ -330,8 +341,8 @@ if __name__ == '__main__':
     env, agent = env_agent_config(cfg, seed=4)
     agent.load(path=cfg.model_path)
     rewards, ma_rewards = eval(cfg, env, agent, 'final')
-    save_results(rewards, ma_rewards, tag='eval_task3_' + env.env_name, path=cfg.result_path)
-    plot_rewards_cn(rewards, ma_rewards, tag="eval_task3_" + env.env_name, env=cfg.env, algo=cfg.algo,
+    save_results(rewards, ma_rewards, tag='eval_task4_' + env.env_name, path=cfg.result_path)
+    plot_rewards_cn(rewards, ma_rewards, tag="eval_task4_" + env.env_name, env=cfg.env, algo=cfg.algo,
                     path=cfg.result_path)
     print(end - start)
 

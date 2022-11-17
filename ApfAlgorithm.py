@@ -51,11 +51,11 @@ class APF:
         self.maximumClimbingAngle = 100 / 180 * np.pi  # 最大爬升角
         self.maximumSubductionAngle = - 75 / 180 * np.pi  # 最大俯冲角
 
-        # UAV_task用这套
-        self.act_bound = [-1, 3]
+        # # UAV_task用这套
+        # self.act_bound = [-1, 3]
 
-        # # UAV_task2用这套
-        # self.act_bound = [-1, 1]
+        # UAV_task2用这套
+        self.act_bound = [-1, 1]
 
         # -------------路径（每次getqNext会自动往path添加路径）---------#
         self.path = self.x0.copy()
@@ -74,6 +74,20 @@ class APF:
     def reset(self):  # 重置环境
         self.path = self.x0.copy()
         self.path = self.path[np.newaxis, :]
+
+    def calculateDynamicState2(self, q):
+        dic = {'sphere': [], 'cylinder': [], 'cone': []}
+        # sAll = self.qgoal - q
+        for i in range(self.numberOfSphere):
+            s1 = self.obstacle[i, :] - q
+            dic['sphere'].append(s1)
+        for i in range(self.numberOfCylinder):
+            s1 = np.hstack((self.cylinder[i, :], q[2])) - q
+            dic['cylinder'].append(s1)
+        for i in range(self.numberOfCone):
+            s1 = np.hstack((self.cone[i, :], self.coneH[i] / 2)) - q
+            dic['cone'].append(s1)
+        return dic
 
     def calculateDynamicState(self, q):
         dic = {'sphere': [], 'cylinder': [], 'cone': []}
@@ -102,6 +116,8 @@ class APF:
                 dic['cone'].append(i)
         return dic
 
+    # 引力可以由神经网络输出，比如加一套新的DDPG结构，把无人机的状态与神经网络给无人机选择的动作当成输入
+    # 传递给新的DDPG结构，用DDPG输出引力大小
     def attraction(self, q, epsilon):  # 计算引力的函数
         r = self.distanceCost(q, self.qgoal)
         r_total = self.distanceCost(self.x0, self.qgoal)

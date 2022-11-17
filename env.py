@@ -45,15 +45,15 @@ class OUNoise(object):
         self.min_sigma = min_sigma
         self.decay_period = decay_period
 
-        # task用这套参数
-        self.action_dim = 1 * (env.numberOfSphere + env.numberOfCylinder + env.numberOfCone)
-        self.low = 0.1
-        self.high = 3
+        # # task用这套参数
+        # self.action_dim = 1 * (env.numberOfSphere + env.numberOfCylinder + env.numberOfCone)
+        # self.low = 0.1
+        # self.high = 3
 
-        # # task2用这套参数
-        # self.action_dim = 3
-        # self.low = -1
-        # self.high = 1
+        # task2用这套参数
+        self.action_dim = 3
+        self.low = -1
+        self.high = 1
 
         self.reset()
 

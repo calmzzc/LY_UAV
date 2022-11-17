@@ -16,6 +16,7 @@ from plot import plot_rewards, plot_rewards_cn
 from Method import getReward, setup_seed
 from ApfAlgorithm import APF
 import numpy as np
+import pandas as pd
 
 curr_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")  # 获取当前时间
 
@@ -72,6 +73,7 @@ def train(cfg, env, agent):
     rewards = []  # 记录奖励
     ma_rewards = []  # 记录滑动平均奖励
     MAX_REWARD = float('-inf')
+    collision_count_list = []
     for i_ep in range(cfg.train_eps):
         q = env.x0
         action_list = []
@@ -83,7 +85,6 @@ def train(cfg, env, agent):
         i_step = 0
         q_before = [None, None, None]
         collision_count = 0
-        collision_count_list = []
         for i_step in range(cfg.max_step):
             i_step += 1
             obsDicq = env.calculateDynamicState(q)
@@ -113,7 +114,7 @@ def train(cfg, env, agent):
 
             # q_next = env.getqNext(env.epsilon0, action_sphere, action_cylinder, action_cone, q, q_before)
             q_next = env.getqNext2(env.epsilon0, action, q, q_before)
-            env.path = np.vstack((env.path,q_next))
+            env.path = np.vstack((env.path, q_next))
             obsDicqNext = env.calculateDynamicState(q_next)
             obs_sphere_next, obs_cylinder_next, obs_cone_next = obsDicqNext['sphere'], obsDicqNext['cylinder'], \
                                                                 obsDicqNext['cone']
@@ -127,7 +128,6 @@ def train(cfg, env, agent):
                 collision_count += 0
             else:
                 collision_count += 1
-            collision_count_list.append(collision_count)
             flag_list.append(flag)
             reward = getReward(flag, env, q_before, q, q_next)
             ep_reward += reward
@@ -146,16 +146,20 @@ def train(cfg, env, agent):
         rewards.append(ep_reward)
         cfg.action_list.append(action_list)
         cfg.flag_list.append(flag_list)
-        cfg.collision_count_list.append(collision_count_list)
+        if collision_count_list:
+            collision_count_list.append(0.9 * collision_count_list[-1] + 0.1 * collision_count)
+        else:
+            collision_count_list.append(collision_count)
         if ma_rewards:
             ma_rewards.append(0.9 * ma_rewards[-1] + 0.1 * ep_reward)
         else:
             ma_rewards.append(ep_reward)
+        cfg.collision_count_list.append(collision_count_list)
         # if ep_reward > MAX_REWARD and ep_reward > -50 and i_ep > 100:
         #     MAX_REWARD = ep_reward
         #     agent.save_mid(cfg.model_path)
     print('完成训练！')
-    return rewards, ma_rewards
+    return rewards, ma_rewards, collision_count_list
 
 
 def eval(cfg, env, agent, jieduan):
@@ -236,11 +240,19 @@ if __name__ == '__main__':
     cfg = DDPGConfig()
     env, agent = env_agent_config(cfg, seed=4)
     make_dir(cfg.result_path, cfg.model_path, cfg.data_path)
-    rewards, ma_rewards = train(cfg, env, agent)
+    start = datetime.datetime.now()
+    rewards, ma_rewards, count_list = train(cfg, env, agent)
+    end = datetime.datetime.now()
     agent.save(path=cfg.model_path)
     save_results(rewards, ma_rewards, tag='train_task2_' + env.env_name, path=cfg.result_path)
     plot_rewards_cn(rewards, ma_rewards, tag="train_task2_" + env.env_name, env=cfg.env, algo=cfg.algo,
                     path=cfg.result_path)
+    writer = pd.ExcelWriter(r'D:\LY_UAV\UAV_task2_o4.xlsx')
+    df1 = pd.DataFrame(ma_rewards, columns=['ma_rewards'])
+    df2 = pd.DataFrame(count_list, columns=['count_list'])
+    df1.to_excel(writer, sheet_name='df1')
+    df2.to_excel(writer, sheet_name='df2')
+    writer.close()
     # 测试
     env, agent = env_agent_config(cfg, seed=4)
     agent.load(path=cfg.model_path)
@@ -248,6 +260,7 @@ if __name__ == '__main__':
     save_results(rewards, ma_rewards, tag='eval_task2_' + env.env_name, path=cfg.result_path)
     plot_rewards_cn(rewards, ma_rewards, tag="eval_task2_" + env.env_name, env=cfg.env, algo=cfg.algo,
                     path=cfg.result_path)
+    print(end - start)
     # agent.load_mid(path=cfg.model_path)
     # rewards, ma_rewards = eval(cfg, env, agent, 'mid')
     # save_results(rewards, ma_rewards, tag='mid_eval_task2', path=cfg.result_path)
